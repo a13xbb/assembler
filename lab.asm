@@ -42,6 +42,16 @@ print_name	macro	name
 	pop	AX
 endm
 
+print_buf macro name
+push	AX
+	push	DX
+	mov	DX, offset name
+	mov	AH,09h
+	int	21h
+	pop	DX
+	pop	AX
+endm
+
 get_first_symbol 	macro  filename             ;первый символ отличный от пробела перемещается в DI
     xor 	CX,CX
 	mov 	CL, filename[1]   	
@@ -86,6 +96,7 @@ endm
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ;========================================================================
+
 start:
 	;mov	SI,80h
 	;mov 	AH,02	
@@ -169,16 +180,21 @@ continue_without_renaming:
 	print_letter LF
 	input_str string2
 
+	print_letter CR
+	print_letter LF
+
+	mov Flag, 0
+main:
 	mov DI, offset Buffer
 	call Len
 	mov CX, DI
 	mov DI, offset Buffer
 	;call print_reg_CX
-	print_letter CR
-	print_letter LF
+	; print_letter CR
+	; print_letter LF
 	
 
-cycle1:
+cycle1:							;finding first index of substring
 	mov SI, DI
 	push DI
 	mov DI, SI
@@ -188,6 +204,9 @@ cycle1:
 	mov CL, string1[1]
 	xor AX, AX
 	xor BX, BX
+	; print_letter '#'
+	; print_letter CR
+	; print_letter LF
 	in_cycle:
 		mov BL, ES:[DI]
 		mov AL, ES:[SI]
@@ -207,28 +226,71 @@ cycle1:
 	pop CX
 	pop DI
 	cmp CX, 0
-	je not_found
+	je ending
 	inc DI
 loop cycle1
 
-not_found:
-	print_mes 'string not found'
+ending:
+	cmp Flag, 0
+	je substring_not_found
+	print_letter CR
+	print_letter LF
+	print_buf Buffer
+	mov	AX, 4C00h
+	int 	21h
+	substring_not_found:
+	print_letter CR
+	print_letter LF
+	print_mes 'substring not found'
 	mov	AX, 4C00h
 	int 	21h
 
 
 end_cycle:
+	mov Flag, 1
 	sub DI, offset Buffer
 	mov CX, DI
 	sub CL, string1[1]
 	mov Index, CX
-	
-	print_letter CR
-	print_letter LF
-	call print_reg_CX
+	; print_letter CR
+	; print_letter LF
+	; call print_reg_CX
+	mov DI, offset newstring
+	mov SI, offset Buffer
+	cld
+	rep movsb
 
+	mov SI, offset string2 + 2
+	mov CL, string2[1]
+	cld
+	rep movsb
 
+	mov SI, offset Buffer
+	add SI, Index
+	mov BL, string1[1]
+	xor BH, BH
+	add SI, BX
+	push DI
+	mov DI, offset Buffer
+	call Len
+	mov CX, DI
+	pop DI
+	sub CL, string1[1]
+	sub CX, Index
+	add CX, 1
+	cld
+	rep movsb
 	
+	mov DI, offset newstring
+	call Len
+	mov CX, DI
+	mov SI, offset newstring 
+	mov DI, offset Buffer
+	cld
+	rep movsb
+	mov byte ptr[DI], '$'
+	
+	jmp main
 	
 	mov	AX, 4C00h
 	int 	21h
@@ -349,5 +411,9 @@ Index DW ?
 Buffer DB 256 dup (' ')
 string1 DB 200, 0, 200 dup (' ')
 string2 DB 200, 0, 200 dup (' ')
+Flag DW ?
+newstring DB 256 dup (' ')
 	code_seg ends
          end start
+
+
