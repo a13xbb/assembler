@@ -103,19 +103,24 @@ start:
 	;mov 	CX,16
 
 ;------- check string of parameters -------------------------
-   	;mov 	CL,ES:[80h]   	; addres of length parameter in psp
-								; is it 0 in buffer?
-   	;cmp 	CL,0
-   	;jne 	cont4        		; yes
+   	mov 	CL,ES:[80h]   	; addres of length parameter in psp
+								;is it 0 in buffer?
+   	cmp 	CL,0
+	je continue_with_no_parameter
+   	jmp continue_with_parameter        	
 ;----------------------------------------------------------------------------
-	print_mes 'Please, enter file name' ;если имя файла не введено параметром, запрашиваю его
+
+continue_with_no_parameter:
+	print_mes 'Please, enter file name: ' ;если имя файла не введено параметром, запрашиваю его
+	
+    input_str FileName
 	print_letter CR
 	print_letter LF
 	
-    input_str FileName
-	
     get_first_symbol FileName
 
+
+continue_with_FileName_as_parameter:
 	mov	AX,	3D02h		; открываю файл чтобы проверить, существует ли он
 	mov	DX, DI    
 	int	21h                         
@@ -131,10 +136,8 @@ file_exists:
 	mov	AH,	3Eh		; закрываю файл
 	mov	BX, Handler        
 	int	21h        
-	print_letter CR
-	print_letter LF
 	
-	
+	print_mes 'If you want to rename file, enter new file name: '
     input_str FileName2
 	
 	cmp FileName2[1], 0h 		    ;если нового имени файла нет, то продолжить без переименовывания
@@ -174,11 +177,59 @@ continue_without_renaming:
 
 	print_letter CR
 	print_letter LF
+	print_mes 'Enter substring you want to change: '
 	input_str string1
+	mov DI, offset string1 + 2			;проверяю 1 подстроку на пустоту
+	call Len
+	cmp DI, 0
+	jne continue1
+	print_letter CR
+	print_letter LF
+	print_mes 'Empty substring input'   ;error
+	mov	AX, 4C00h
+	int 	21h
+	int 20h
+
+continue1:
 
 	print_letter CR
 	print_letter LF
-	input_str string2
+	print_mes 'Enter new substring: '
+	input_str string2					;проверяю 2 подстроку на пустоту
+	mov DI, offset string2 + 2
+	call Len
+	cmp DI, 0
+	jne continue2
+	print_letter CR
+	print_letter LF
+	print_mes 'Empty substring input'   ;error
+	mov	AX, 4C00h
+	int 	21h
+	int 20h
+
+continue2:
+
+	xor AX, AX
+	xor BX, BX
+	mov AL, string1[1]
+	mov BL, string2[1]
+	cmp AL, BL
+	jne continue3
+substrings_have_same_length:		
+	mov CL, string1[1] 			
+	mov DI, offset string1 + 2
+	mov SI, offset string2 + 2
+	rep cmpsb
+	cmp CX, 0
+	je continue3
+	print_letter CR
+	print_letter LF
+	print_mes 'Substrings are equal'    ;error
+	mov	AX, 4C00h
+	int 	21h
+	int 20h
+
+continue3:
 
 	print_letter CR
 	print_letter LF
@@ -222,7 +273,9 @@ cycle1:							;finding first index of substring
 	loop in_cycle
 	next_iterration:
 	cmp CX, 0
-	je end_cycle
+	jne continue4
+	jmp end_cycle
+	continue4:
 	pop CX
 	pop DI
 	cmp CX, 0
@@ -233,17 +286,63 @@ loop cycle1
 ending:
 	cmp Flag, 0
 	je substring_not_found
-	print_letter CR
-	print_letter LF
+
+	MOV AH, 3Eh        ;закрываю старый файл
+	MOV BX, Handler
+	INT 21h
+
+	mov AH, 41h			;удаляю старый файл
+	mov DX, offset FileName + 2
+	int 21h
+
+	MOV AH, 3Ch 		;создаю новый файл
+	MOV CX, 0
+	MOV DX, offset FileName + 2
+	INT 21h
+
+	MOV AH, 3Dh ; функция OPEN
+	MOV AL, 2 ; Доступ для чтения/записи
+	MOV DX, offset FileName + 2 ; Адрес имени файла
+	INT 21h
+	;Jc error1
+	MOV Handler, AX
+
+	xor CX, CX
+	xor DX, DX
+	mov AH, 42h
+	mov AL, 0
+	mov BX, Handler
+	int 21h
+	jc seek_err
+
+	
+	MOV AH, 40h ; Функция записи
+	MOV BX, Handler ; Дескриптор
+	MOV CX, BufLen ; Число записываемых байтов
+	;call print_reg_CX
+	MOV DX, offset Buffer ; Адрес буфера
+	INT 21h
+
+	
 	print_buf Buffer
+
 	mov	AX, 4C00h
 	int 	21h
+	int 20h
+	; write_error:
+	; print_mes 'Write error'
+	; mov	AX, 4C00h
+	; int 21h
+	; int 20h
 	substring_not_found:
-	print_letter CR
-	print_letter LF
-	print_mes 'substring not found'
+	print_mes 'Substring is not found'     ;error
 	mov	AX, 4C00h
 	int 	21h
+
+	seek_err:
+	print_mes 'seek err'
+	mov	AX, 4C00h
+	int 21h
 
 
 end_cycle:
@@ -289,6 +388,8 @@ end_cycle:
 	cld
 	rep movsb
 	mov byte ptr[DI], '$'
+	sub DI, offset Buffer
+	mov BufLen, DI
 	
 	jmp main
 	
@@ -306,38 +407,42 @@ end_cycle:
 
 
 
-cont4:	
+continue_with_parameter:	
 									;if there is a filename in psp
 	xor	BH,	BH
 	;mov	BL,  tail[0]
 	;mov	tail[BX+1],	0
 	mov	BL, ES:[80h]		 
-	mov	byte ptr [BX+81h],	0
+	mov	byte ptr [BX+81h],	'$'
 	
+	mov CX, ES:[80h]				;пропускаю все пробелы в параметре
+	mov DI, 81h
+	mov AL, ' '
+	cld
+	rep scasb
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   	mov 	CL,ES:80h    	
-   	xor 	CH,CH       	
-   	cld             		
-  	mov 	DI, 81h     	
-   	mov 	AL, ' '        
-	repe    scasb   			
-							
-							
-        dec DI        	
-;-------------------------------------------------------------------------
-	mov	AX,3D02h		; Open file for read/write
-	mov	DX,DI
-	int	21h
-	jnc	openOK
-print_mes	'openERR'
-	int	20h
-;===========================================================================
-openOK:
-print_mes	'openOK'
-	mov	AX,4C00h
+	mov CX, BX
+	add CX, 81h
+	dec DI
+	sub CX, DI
+	mov SI, DI
+	mov DI, offset FileName + 2
+	rep movsb
+	mov DI, offset FileName + 2
+	jmp continue_with_FileName_as_parameter
+	; print_name FileName
+
+
+	mov	AX, 4C00h
 	int 	21h
-;
+
+									
+ int 20h
+
+
+
+
+
 print_hex	proc	near
 	and	DL,0Fh
 	add	DL,30h
@@ -393,6 +498,9 @@ ret
 print_reg_CX	endp
 ;
 Len proc    near
+	push AX
+	push BX
+	push CX
     mov al,'$'    ;искать 0
     mov bx,di   ;сохранить начальный адрес строки
     mov cx,-1   ;максимально возможная длина строки 0FFFFh
@@ -400,6 +508,9 @@ Len proc    near
     sub di,bx   ;разница адресов между началом строки и
             ;найденым 0 = длина строки + 1
     dec di      ;DI=DI-1=длина строки
+	pop CX
+	pop BX
+	pop AX
     ret
 Len endp
 ;
@@ -411,6 +522,7 @@ Index DW ?
 Buffer DB 256 dup (' ')
 string1 DB 200, 0, 200 dup (' ')
 string2 DB 200, 0, 200 dup (' ')
+BufLen DW ?
 Flag DW ?
 newstring DB 256 dup (' ')
 	code_seg ends
