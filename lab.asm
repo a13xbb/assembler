@@ -216,12 +216,23 @@ continue2:
 	cmp AL, BL
 	jne continue3
 substrings_have_same_length:		
-	mov CL, string1[1] 			
+	mov CL, string1[1] 	
+	xor CH, CH		
 	mov DI, offset string1 + 2
 	mov SI, offset string2 + 2
-	rep cmpsb
+	comparing_substrings:
+	mov AX, ES:[DI]
+	mov BX, ES:[SI]
+	cmp AX, BX
+	jne continue3
+	inc DI
+	inc SI
+	dec CX 
 	cmp CX, 0
-	je continue3
+	je substrings_are_equal
+	jmp comparing_substrings
+	
+	substrings_are_equal:
 	print_letter CR
 	print_letter LF
 	print_mes 'Substrings are equal'    ;error
