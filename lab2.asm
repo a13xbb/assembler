@@ -1,4 +1,3 @@
-
 .286
 code_seg segment
         ASSUME  CS:CODE_SEG,DS:code_seg,ES:code_seg
@@ -12,7 +11,9 @@ old_21h         DD  ?
 CR	EQU 13
 LF	EQU 10
 SPACE	EQU 20h
-ext DB 'txt$'
+ext DB 'txt,lst,map$'
+
+ext_name DB ?
 delete_msg DB 'can not delete file with such extension$'
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -97,6 +98,8 @@ new_21h proc far
 		mov cx, 20
 		repne scasb
 		
+		
+		
 		push ds
 		push cs
 		pop ds
@@ -107,6 +110,7 @@ new_21h proc far
 cycle1:
 		mov bx, di
 		mov dl, byte ptr [bx]
+		push di
 
 		push ds
 		push cs
@@ -124,27 +128,45 @@ cycle1:
 		;pushf
 		;call dword ptr cs:old_21h
 		;pop dx
+		cmp al, '$'
+		je need_to_delete
 		cmp al, dl
-		jne need_to_delete
+		jne next_ext
+		pop di
 		inc di
 		push ds
 		push cs
 		pop ds
 		inc si
 		pop ds
-		
-loop cycle1
+		dec cx
+		cmp cx, 0
+		je equal_extensions
+		jmp cycle1
+		next_ext:
+		pop di
+		push ds
+		push cs
+		pop ds
+		inc si
+		pop ds
+		mov cx, 3
+jmp cycle1
 		
 		
 	equal_extensions:
 		jmp cnt2
 		cnt2:
 		
-		
-		mov dx, offset cs:delete_msg   ;почему не работает???
+		push ds
+		push cs
+		pop ds
+		mov dx, offset delete_msg   
 		mov ah, 09h
-		pushf
-		call dword ptr cs:old_21h
+		int 21h
+		pop ds
+		;pushf
+		;call dword ptr cs:old_21h
 		
 		jmp endproc
 	
@@ -158,6 +180,7 @@ loop cycle1
 		endproc:
         iret
 	need_to_delete:
+		pop di
 		
 		; push ds
 		; push cs
